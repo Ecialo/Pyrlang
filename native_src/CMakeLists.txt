@@ -22,7 +22,7 @@ set(SOURCE_FILES
 
         # libcxx/Src/cxx_exceptions.cxx
         # libcxx/Src/cxxsupport.cxx
-        )
+        byte_codec.h)
 
 add_library(nativeETF SHARED ${SOURCE_FILES})
 link_libraries(nativeETF ${PYTHON_LIBRARIES})

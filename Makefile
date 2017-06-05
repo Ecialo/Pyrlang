@@ -8,6 +8,6 @@ run: build
 build:
 	cd native_src && $(MAKE)
 
-test:
+test: build
 	$(PY) test/dist_etf_decode_test.py && \
 	$(PY) test/dist_etf_transitive_test.py

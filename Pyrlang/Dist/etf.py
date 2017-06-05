@@ -59,11 +59,17 @@ TAG_ATOM_UTF8_EXT = 118
 TAG_SMALL_ATOM_UTF8_EXT = 119
 
 
-class ETFDecodeException(Exception):
+class ETFDecodeException(RuntimeError):
+    """ Thrown by decode routines, inherited from RuntimeError. NOTE that
+        native C++ ETF routines would throw RuntimeError directly.
+    """
     pass
 
 
-class ETFEncodeException(Exception):
+class ETFEncodeException(RuntimeError):
+    """ Thrown by encode routines, inherited from RuntimeError. NOTE that
+        native C++ ETF routines would throw RuntimeError directly.
+    """
     pass
 
 
@@ -434,7 +440,7 @@ def _pack_binary(data, last_byte_bits):
         return bytes([TAG_BINARY_EXT]) + util.to_u32(len(data)) + data
 
     return bytes([TAG_BIT_BINARY_EXT]) + util.to_u32(len(data)) + \
-        bytes([last_byte_bits]) + data
+           bytes([last_byte_bits]) + data
 
 
 def term_to_binary_2(val):
@@ -500,17 +506,24 @@ def term_to_binary(val):
 try:
     # Find current module, try import nativeETF implementation and,
     # if successful, monkey patch worker functions of the current module
-    import sys
+    import sys, nativeETF
+
     current_module = sys.modules[__name__]
 
-    import nativeETF
-    current_module.binary_to_term_2 = nativeETF.binary_to_term_2
-    current_module.term_to_binary_2 = nativeETF.term_to_binary_2
+
+    def wrap_bin_to_term(data, opts):
+        """ The C++ version takes data and an index instead of a data slice. """
+        (value, index) = nativeETF.binary_to_term_native(data, 0, opts)
+        # Return slice of tail
+        return value, data[index:]
+
+
+    current_module.binary_to_term_2 = wrap_bin_to_term
+    current_module.term_to_binary_2 = nativeETF.term_to_binary_native
 
 except ImportError:
     LOG("nativeETF: Could not import, falling back to Python impl")
     pass
-
 
 __all__ = ['binary_to_term', 'binary_to_term_2',
            'term_to_binary', 'term_to_binary_2']

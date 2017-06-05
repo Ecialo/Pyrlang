@@ -20,33 +20,30 @@ struct B2TOptions {
   void parse(const Py::Dict& pyopts);
 };
 
-class NativeETFModule : public Py::ExtensionModule<NativeETFModule> {
-public:
-  NativeETFModule()
-    : Py::ExtensionModule<NativeETFModule>(
-    "nativeETF") // this must be name of the file on disk e.g. XXX.so or XXX.pyd
-  {
-    add_varargs_method("binary_to_term",
-                       &NativeETFModule::py_binary_to_term,
-                       "Decode bytes with 131 tag byte into a Python value");
 
-    add_varargs_method("binary_to_term_2",
-                       &NativeETFModule::py_binary_to_term_2,
+class NativeETFModule : public Py::ExtensionModule<NativeETFModule> {
+private:
+  Py::Module term_mod_;
+
+public:
+  // Base must be called  with the name of file on disk e.g. XXX.so or XXX.pyd
+  NativeETFModule()
+    : Py::ExtensionModule<NativeETFModule>("nativeETF"),
+      term_mod_("Pyrlang.term")
+  {
+    add_varargs_method("binary_to_term_native",
+                       &NativeETFModule::py_binary_to_term_native,
                        "Decode bytes into a Python value, 131 tag header must "
                          "either be already stripped or not be preset");
 
-    add_varargs_method("term_to_binary",
-                       &NativeETFModule::py_term_to_binary,
-                       "Encode to bytes and add the 131 tag byte");
-
-    add_varargs_method("term_to_binary_2",
-                       &NativeETFModule::py_term_to_binary_2,
+    add_varargs_method("term_to_binary_native",
+                       &NativeETFModule::py_term_to_binary_native,
                        "Encode to bytes but do not add the 131 tag header");
 
     // after initialize the moduleDictionary with exist
     initialize("documentation for the simple2 module");
 
-    Py::Dict d(moduleDictionary());
+//    Py::Dict d(moduleDictionary());
 //    d["xxx"] = Py::asObject(new pysvn_enum<xxx_t>());
 //    d["var"] = Py::String("var value");
   }
@@ -54,18 +51,38 @@ public:
   virtual ~NativeETFModule() {}
 
 private:
-  Py::Object py_binary_to_term(const Py::Tuple& args);
+  Py::Object etf_error(const char* format, ...);
 
-  Py::Object py_binary_to_term_2(const Py::Tuple& args);
-
-  Py::Object py_term_to_binary(const Py::Tuple& args) {
-    return Py::None();
+  Py::Object etf_error(const std::string& what) {
+//  Py::Dict this_module(moduleDictionary());
+//  Py::Callable exception_class = this_module.getItem("ETFDecodeException");
+//  Py::Object exception = exception_class.apply(Py::TupleN(Py::String(what)));
+//  throw exception;
+    throw Py::RuntimeError(what);
   }
 
-  Py::Object py_term_to_binary_2(const Py::Tuple& args) {
-    return Py::None();
+  Py::Object incomplete_data(const char* what) {
+    return etf_error("Incomplete data at %s", what);
   }
+
+  Py::Object py_binary_to_term_native(const Py::Tuple& args);
+
+  Py::Object py_term_to_binary_native(const Py::Tuple& args);
+
+  Py::Object str_to_atom(const std::string& basic_string,
+                         const std::string& encoding,
+                         const B2TOptions& options);
 };
+
+//class ETFDecodeException: public Py::BaseException {
+//public:
+//  ETFDecodeException(const std::string& what): BaseException(what) {}
+//};
+//
+//class ETFEncodeException: public Py::BaseException {
+//public:
+//  ETFDecodeException(const std::string& what): BaseException(what) {}
+//};
 
 static constexpr uint8_t ETF_VERSION_TAG = 131;
 
