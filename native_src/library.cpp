@@ -16,15 +16,15 @@ void B2TOptions::parse(const Py::Dict& pyopts) {
 Py::Object NativeETFModule::py_binary_to_term(const Py::Tuple& args) {
   args.verify_length(1, 2);
 
-  Py::Bytes data(args[0]);
+  // XXX: Possibly copying to a string can be avoided
+  Py::Bytes data_b(args[0]);
+  std::string data = data_b.as_std_string();
 
-  std::cout << data.size() << std::endl;
+  std::cout << data.length() << " -- " << data << std::endl;
 
-  auto first = 
-  std::cout << "First item type is " << first.type().as_string() << std::endl;
-//  if (first. != ETF_VERSION_TAG) {
-//
-//  }
+  if (data[0] != ETF_VERSION_TAG) {
+
+  }
 
   return Py::None();
 }

@@ -29,8 +29,11 @@ import struct
 
 from zlib import decompressobj
 
-from Pyrlang import term
+from Pyrlang import term, logger
 from Pyrlang.Dist import util
+
+LOG = logger.nothing
+ERROR = logger.tty
 
 ETF_VERSION_TAG = 131
 
@@ -492,6 +495,21 @@ def term_to_binary(val):
     """ Prepend the 131 header byte to encoded data.
     """
     return bytes([ETF_VERSION_TAG]) + term_to_binary_2(val)
+
+
+try:
+    # Find current module, try import nativeETF implementation and,
+    # if successful, monkey patch worker functions of the current module
+    import sys
+    current_module = sys.modules[__name__]
+
+    import nativeETF
+    current_module.binary_to_term_2 = nativeETF.binary_to_term_2
+    current_module.term_to_binary_2 = nativeETF.term_to_binary_2
+
+except ImportError:
+    LOG("nativeETF: Could not import, falling back to Python impl")
+    pass
 
 
 __all__ = ['binary_to_term', 'binary_to_term_2',

@@ -26,3 +26,9 @@ set(SOURCE_FILES
 
 add_library(nativeETF SHARED ${SOURCE_FILES})
 link_libraries(nativeETF ${PYTHON_LIBRARIES})
+
+set_target_properties(nativeETF PROPERTIES
+        PREFIX ""
+        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/.."
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/.."
+        )

@@ -6,7 +6,7 @@ run: build
 
 .PHONY: build
 build:
-	$(PY) setup.py build
+	cd native_src && $(MAKE)
 
 test:
 	$(PY) test/dist_etf_decode_test.py && \

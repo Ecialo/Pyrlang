@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# IDE
+native_src/.idea/*
+*.beam
+native_src/_build/*
+native_src/cmake-build-*/
