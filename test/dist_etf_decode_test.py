@@ -33,13 +33,21 @@ class TestETFDecode(unittest.TestCase):
         self.assertEqual(t1, "hello")
         self.assertEqual(tail, b'')
 
-    def test_decode_list(self):
+    def test_decode_list_1(self):
         """ Try decode a list with a single atom 'derp' """
         b1 = bytes([131, 108, 0, 0, 0, 1, 100, 0, 4, 100, 101, 114, 112, 106])
-        (t1, tail) = etf.binary_to_term(b1)
+        (t1, tail1) = etf.binary_to_term(b1)
         self.assertTrue(isinstance(t1, list))
         self.assertEqual(t1, [term.Atom("derp")])
-        self.assertEqual(tail, b'')
+        self.assertEqual(tail1, b'')
+
+    def test_decode_list_2(self):
+        """ Try decode a list with a single atom 'derp' """
+        b1 = bytes([131, 108, 0, 0, 0, 1, 100, 0, 4, 100, 101, 114, 112, 106])
+        (t2, tail2) = etf.binary_to_term(b1, {"simple_lists": False})
+        self.assertTrue(isinstance(t2, term.List))
+        self.assertEqual(t2.elements_, [term.Atom("derp")])
+        self.assertEqual(tail2, b'')
 
     def test_decode_unicode_string(self):
         """ Try a string with emoji, a list of unicode integers """

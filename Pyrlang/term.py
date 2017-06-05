@@ -70,10 +70,10 @@ class List:
         elements = ", ".join(str(e) for e in self.elements_)
         return "[%s | %s]" % (elements, self.tail_)
 
-    def __init__(self) -> None:
-        self.elements_ = []
+    def __init__(self, elements=None, tail=None) -> None:
+        self.elements_ = elements if elements is not None else []
         """ List value containing other Erlang and Python values. """
-        self.tail_ = []
+        self.tail_ = tail if tail is not None else []
         """ Optional tail value, if you are sure that the list is properly
             formed, you can ignore this field. In properly formed lists it 
             is always ``nil`` (``[]``).

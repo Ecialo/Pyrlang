@@ -11,6 +11,9 @@ void B2TOptions::parse(const Py::Dict& pyopts) {
   if (pyopts.hasKey("atoms_as_strings")) {
     atoms_as_strings = pyopts.getItem("atoms_as_strings").as_bool();
   }
+  if (pyopts.hasKey("simple_lists")) {
+    simple_lists = pyopts.getItem("simple_lists").as_bool();
+  }
 }
 
 
@@ -112,7 +115,14 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
       Py::Object tail;
       std::tie(tail, index) = binary_to_term_native(input_str, index, options);
 
-      return std::make_pair((Py::Object)result, index);
+      if (options.simple_lists) {
+        return std::make_pair((Py::Object) result, index);
+      }
+
+      // Construct a slower term.List which can represent tail as well
+      Py::Callable list_class(term_mod_.getAttr("List"));
+      return std::make_pair(list_class.apply(Py::TupleN(result, tail)),
+                            index);
     }
 
     default:
