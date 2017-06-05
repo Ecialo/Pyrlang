@@ -39,7 +39,7 @@ Py::Object NativeETFModule::py_binary_to_term_native(const Py::Tuple& args) {
 }
 
 
-std::pair<Py::Object, size_t>
+NativeETFModule::B2TResult
 NativeETFModule::binary_to_term_native(const std::string& input_str,
                                        size_t index,
                                        const B2TOptions& options)
@@ -55,34 +55,12 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
   switch (tag) {
     case TAG_ATOM_EXT:
     case TAG_ATOM_UTF8_EXT: {
-      if (input_length < 3) {
-        return incomplete_data("decoding length for an atom name");
-      }
-      auto len_expected = codec::read_big_u16(ptr + 1);
-      if (len_expected + 3 > input_length) {
-        return incomplete_data("decoding text for an atom");
-      }
-
-      std::string name(ptr + 3, len_expected);
-      auto enc = (tag == TAG_ATOM_UTF8_EXT) ? "utf8" : "latin-1";
-      return std::make_pair(str_to_atom(name, enc, options),
-                            index + len_expected + 3);
+      return _decode_atom(index, options, ptr, input_length, tag);
     }
 
     case TAG_SMALL_ATOM_EXT:
     case TAG_SMALL_ATOM_UTF8_EXT: {
-      if (input_length < 2) {
-        incomplete_data("decoding length for a small-atom name");
-      }
-      auto len_expected = codec::read_big_u16(ptr + 1);
-      if (len_expected + 2 > input_length) {
-        return incomplete_data("decoding text for a small-atom");
-      }
-
-      std::string name(ptr + 2, len_expected);
-      auto enc = (tag == TAG_SMALL_ATOM_UTF8_EXT) ? "utf8" : "latin-1";
-      return std::make_pair(str_to_atom(name, enc, options),
-                            index + len_expected + 3);
+      return _decode_small_atom(index, options, ptr, input_length, tag);
     }
 
     case TAG_NIL_EXT: {
@@ -96,33 +74,7 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
     }
 
     case TAG_LIST_EXT: {
-      if (input_length < 5) {
-        return incomplete_data("decoding length for a list");
-      }
-
-      uint32_t len_expected = codec::read_big_u32(ptr + 1);
-
-      Py::List result;
-      index += 5; // skip the type byte and 4 bytes length
-
-      for (uint32_t i = 0; i < len_expected; ++i) {
-        Py::Object item;
-        std::tie(item, index) = binary_to_term_native(input_str, index, options);
-        result.append(item);
-      }
-
-      // Read the tail
-      Py::Object tail;
-      std::tie(tail, index) = binary_to_term_native(input_str, index, options);
-
-      if (options.simple_lists) {
-        return std::make_pair((Py::Object) result, index);
-      }
-
-      // Construct a slower term.List which can represent tail as well
-      Py::Callable list_class(term_mod_.getAttr("List"));
-      return std::make_pair(list_class.apply(Py::TupleN(result, tail)),
-                            index);
+      return _decode_list(input_str, index, options, ptr, input_length);
     }
 
     default:
@@ -130,6 +82,78 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
   }
 
   return etf_error("Unknown tag %d", tag);
+}
+
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_list(const std::string& input_str, size_t index,
+                              const B2TOptions& options, const char* ptr,
+                              size_t input_length) {
+  if (input_length < 5) {
+    return incomplete_data("decoding length for a list");
+  }
+
+  uint32_t len_expected = codec::read_big_u32(ptr + 1);
+
+  Py::List result;
+  index += 5; // skip the type byte and 4 bytes length
+
+  for (uint32_t i = 0; i < len_expected; ++i) {
+    Py::Object item;
+    std::tie(item, index) = binary_to_term_native(input_str, index, options);
+    result.append(item);
+  }
+
+  // Read the tail
+  Py::Object tail;
+  std::tie(tail, index) = binary_to_term_native(input_str, index, options);
+
+  if (options.simple_lists) {
+    return std::make_pair((Py::Object) result, index);
+  }
+
+  // Construct a slower term.List which can represent tail as well
+  Py::Callable list_class(term_mod_.getAttr("List"));
+  return std::make_pair(list_class.apply(TupleN(result, tail)),
+                        index);
+}
+
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_small_atom(size_t index, const B2TOptions& options,
+                                    const char* ptr, size_t input_length,
+                                    char tag) {
+  if (input_length < 2) {
+    incomplete_data("decoding length for a small-atom name");
+  }
+  auto len_expected = codec::read_big_u16(ptr + 1);
+  if (len_expected + 2 > input_length) {
+    return incomplete_data("decoding text for a small-atom");
+  }
+
+  std::string name(ptr + 2, len_expected);
+  auto enc = (tag == TAG_SMALL_ATOM_UTF8_EXT) ? "utf8" : "latin-1";
+
+  return std::make_pair(str_to_atom(name, enc, options),
+                        index + len_expected + 3);
+}
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_atom(size_t index, const B2TOptions& options,
+                              const char* ptr, size_t input_length, char tag) {
+  if (input_length < 3) {
+    return incomplete_data("decoding length for an atom name");
+  }
+  auto len_expected = codec::read_big_u16(ptr + 1);
+  if (len_expected + 3 > input_length) {
+    return incomplete_data("decoding text for an atom");
+  }
+
+  std::string name(ptr + 3, len_expected);
+  auto enc = (tag == TAG_ATOM_UTF8_EXT) ? "utf8" : "latin-1";
+
+  return std::make_pair(str_to_atom(name, enc, options),
+                        index + len_expected + 3);
 }
 
 
