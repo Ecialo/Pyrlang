@@ -14,8 +14,9 @@
 namespace pyrlang {
 
 struct B2TOptions {
-  bool binaries_as_bytes = false;
+  bool simple_binaries = true;
   bool atoms_as_strings = false;
+  bool simple_lists = true;
 
   void parse(const Py::Dict& pyopts);
 };
@@ -51,9 +52,11 @@ public:
   virtual ~NativeETFModule() {}
 
 private:
-  Py::Object etf_error(const char* format, ...);
+  using B2TResult = std::pair<Py::Object, size_t>;
 
-  Py::Object etf_error(const std::string& what) {
+  B2TResult etf_error(const char* format, ...);
+
+  B2TResult etf_error(const std::string& what) {
 //  Py::Dict this_module(moduleDictionary());
 //  Py::Callable exception_class = this_module.getItem("ETFDecodeException");
 //  Py::Object exception = exception_class.apply(Py::TupleN(Py::String(what)));
@@ -61,11 +64,15 @@ private:
     throw Py::RuntimeError(what);
   }
 
-  Py::Object incomplete_data(const char* what) {
+  B2TResult incomplete_data(const char* what) {
     return etf_error("Incomplete data at %s", what);
   }
 
   Py::Object py_binary_to_term_native(const Py::Tuple& args);
+
+  B2TResult
+  binary_to_term_native(const std::string& data, size_t index,
+                        const B2TOptions& options);
 
   Py::Object py_term_to_binary_native(const Py::Tuple& args);
 

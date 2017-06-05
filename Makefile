@@ -6,7 +6,7 @@ run: build
 
 .PHONY: build
 build:
-	cd native_src && $(MAKE)
+	rm -f nativeETF.so; cd native_src && $(MAKE)
 
 test: build
 	$(PY) test/dist_etf_decode_test.py && \

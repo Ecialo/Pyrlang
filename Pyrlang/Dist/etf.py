@@ -18,7 +18,10 @@
     Encoding terms takes optional 'options' argument. Default is ``None`` but
     it can be a dictionary with the following optional keys:
 
-    *   "binaries_as_bytes", default False. Ignores bit tail of bit strings and
+    *   "simple_lists", default True. Returns Erlang lists as Python lists,
+        set this to False and term.List object will be returned which is able
+        to also store list tail and convert contents to Unicode string.
+    *   "simple_binaries", default False. Ignores bit tail of bit strings and
         returns all Erlang binaries as Python bytes.
     *   "atoms_as_strings", default False. Always converts atoms to Python
         strings. This is potentially faster than using the Atom wrapper class.
@@ -284,7 +287,7 @@ def binary_to_term_2(data: bytes, options: dict = {}):
         if len_expected > len_data:
             return incomplete_data("decoding data for a binary")
 
-        if options.get("binaries_as_bytes", False):
+        if options.get("simple_binaries", True):
             return data[5:len_expected], data[len_expected:]
 
         bin1 = term.Binary(data=data[5:len_expected])
@@ -299,7 +302,7 @@ def binary_to_term_2(data: bytes, options: dict = {}):
         if len_expected > len_data:
             return incomplete_data("decoding data for a bit-binary")
 
-        if options.get("binaries_as_bytes", False):
+        if options.get("simple_binaries", True):
             return data[6:len_expected], data[len_expected:]
 
         bin1 = term.Binary(data=data[6:len_expected],
