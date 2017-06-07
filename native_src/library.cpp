@@ -26,7 +26,9 @@ Py::Object NativeETFModule::py_binary_to_term_native(const Py::Tuple& args) {
   args.verify_length(1, 3);
 
   B2TOptions options;
-  options.parse(args[2]);
+  if (args[2].isDict()) {
+    options.parse(args[2]);
+  }
 
   // XXX: Possibly copying to a string can be avoided
   std::string input_str = Py::Bytes(args[0]).as_std_string();
@@ -178,8 +180,8 @@ NativeETFModule::_decode_list(const std::string& input_str, size_t index,
 
   // Construct a slower term.List which can represent tail as well
   Py::Callable list_class(term_mod_.getAttr("List"));
-  return std::make_pair(list_class.apply(Py::TupleN(result, tail)),
-                        index);
+  Py::Object result_List = list_class.apply(Py::TupleN(result, tail));
+  return std::make_pair(result_List, index);
 }
 
 

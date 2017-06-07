@@ -8,7 +8,10 @@ from Pyrlang.Dist import etf
 from Pyrlang import term
 
 
-class TestETFDecode(unittest.TestCase):
+class TestETFDecode_Python(unittest.TestCase):
+    def setUp(self):
+        etf.use_python_implementation()
+
     def test_decode_atom(self):
         """ Try an atom 'hello' """
         b1 = bytes([131, 100, 0, 5, 104, 101, 108, 108, 111])
@@ -49,15 +52,23 @@ class TestETFDecode(unittest.TestCase):
         self.assertEqual(t1, 170123456)
         self.assertEqual(tail, b'')
 
-    def test_decode_list_1(self):
+    def test_decode_big_int(self):
+        """ Try a big long integer, that exceeds 64 bits """
+        b1 = bytes([131, 110, 18, 0, 255, 255, 0, 0, 170, 170, 204, 204, 187,
+                    187, 170, 170, 255, 255, 170, 170, 255, 255])
+        (t1, tail) = etf.binary_to_term(b1)
+        self.assertTrue(isinstance(t1, int))
+        self.assertEqual(t1, 0xffffaaaaffffaaaabbbbccccaaaa0000ffff)
+        self.assertEqual(tail, b'')
+
+    def test_decode_into_python_list(self):
         """ Try decode a list with a single atom 'derp' """
         b1 = bytes([131, 108, 0, 0, 0, 1, 100, 0, 4, 100, 101, 114, 112, 106])
         (t1, tail1) = etf.binary_to_term(b1)
-        self.assertTrue(isinstance(t1, list))
-        self.assertEqual(t1, [term.Atom("derp")])
+        self.assertEqual(t1[0], term.Atom("derp"))
         self.assertEqual(tail1, b'')
 
-    def test_decode_list_2(self):
+    def test_decode_into_pyrlang_list(self):
         """ Try decode a list with a single atom 'derp' """
         b1 = bytes([131, 108, 0, 0, 0, 1, 100, 0, 4, 100, 101, 114, 112, 106])
         (t2, tail2) = etf.binary_to_term(b1, {"simple_lists": False})
@@ -120,11 +131,17 @@ class TestETFDecode(unittest.TestCase):
     def test_decode_binary(self):
         """ Decode binary to term.Binary and to Python bytes and compare. """
         data1 = bytes([131, 109, 0, 0, 0, 1, 34])
-        (val1, tail1) = etf.binary_to_term(data1)
-        (val2, tail2) = etf.binary_to_term(data1, {"binaries_as_bytes": True})
+        (val1, tail1) = etf.binary_to_term(data1, {"simple_binaries": False})
+        (val2, tail2) = etf.binary_to_term(data1)
         self.assertEqual(val1.bytes_, val2)
         self.assertEqual(tail1, b'')
         self.assertEqual(tail2, b'')
+
+
+class TestETFDecode_Native(TestETFDecode_Python):
+    def setUp(self):
+        etf.use_native_implementation()
+
 
 if __name__ == '__main__':
     unittest.main()
