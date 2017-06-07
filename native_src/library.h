@@ -100,6 +100,14 @@ private:
   B2TResult _decode_pid(const std::string& input_str, size_t index,
                         const B2TOptions& options, const char* ptr,
                         size_t input_length);
+
+  B2TResult _decode_map(const std::string& input_str, size_t index,
+                        const B2TOptions& options, const char* ptr,
+                        size_t input_length);
+
+  B2TResult _decode_ref(const std::string& input_str, size_t index,
+                        const B2TOptions& options, const char* ptr,
+                        size_t input_length);
 };
 
 //class ETFDecodeException: public Py::BaseException {

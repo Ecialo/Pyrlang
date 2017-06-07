@@ -79,6 +79,10 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
       return _decode_list(input_str, index, options, ptr, input_length);
     }
 
+    case TAG_MAP_EXT: {
+      return _decode_map(input_str, index, options, ptr, input_length);
+    }
+
     case TAG_SMALL_TUPLE_EXT: {
       if (input_length < 2) {
         return incomplete_data("decoding length for a small tuple");
@@ -111,6 +115,10 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
       return _decode_pid(input_str, index, options, ptr, input_length);
     }
 
+    case TAG_NEW_REF_EXT: {
+      return _decode_ref(input_str, index, options, ptr, input_length);
+    }
+
     case TAG_NEW_FLOAT_EXT: {
       // Value is stored as big-endian IEEE 64-bit float
       double val = codec::read_big_float64(ptr + 1);
@@ -123,6 +131,68 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
 
   return etf_error("Unknown tag %d", tag);
 }
+
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_ref(const std::string& input_str, size_t index,
+                             const B2TOptions& options, const char* ptr,
+                             size_t input_length) {
+  if (input_length < 2) {
+    return incomplete_data("decoding length for a new-ref");
+  }
+
+  const auto term_len = codec::read_big_u16(ptr + 1);
+
+  Py::Object node;
+  std::tie(node, index) = binary_to_term_native(input_str,
+                                                index + 3, // skip the tag
+                                                options);
+
+  // Sanity check
+  int id_data_byte_size = term_len * 4;
+  if (input_length < index + id_data_byte_size + 1) {
+    return incomplete_data("reading a new-ref");
+  }
+
+  ptr = input_str.data() + index;
+  const uint8_t creation = (uint8_t) ptr[0];
+
+  Py::Bytes id_data(ptr + 1, id_data_byte_size);
+
+  // Construct a term.Reference
+  Py::Callable pid_class(term_mod_.getAttr("Reference"));
+  auto ctor_args = Py::TupleN(node,
+                              Py::Long(creation),
+                              id_data);
+  return std::make_pair(pid_class.apply(ctor_args),
+                        index + 1 +
+                        id_data_byte_size); // skip creation, id_data
+}
+
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_map(const std::string& input_str, size_t index,
+                             const B2TOptions& options, const char* ptr,
+                             size_t input_length) {
+  if (input_length < 5) {
+    return incomplete_data("decoding length for a map");
+  }
+
+  uint32_t len_expected = codec::read_big_u32(ptr + 1);
+
+  Py::Dict result;
+  index += 5; // skip the type byte and 4 bytes length
+
+  for (uint32_t i = 0; i < len_expected; ++i) {
+    Py::Object key, val;
+    std::tie(key, index) = binary_to_term_native(input_str, index, options);
+    std::tie(val, index) = binary_to_term_native(input_str, index, options);
+    result.setItem(key, val);
+  }
+
+  return std::make_pair((Py::Object) result, index);
+}
+
 
 NativeETFModule::B2TResult
 NativeETFModule::_decode_pid(const std::string& input_str, size_t index,
@@ -140,7 +210,7 @@ NativeETFModule::_decode_pid(const std::string& input_str, size_t index,
   uint32_t serial = codec::read_big_u32(ptr + 4);
   uint8_t creation = (uint8_t) ptr[8];
 
-  // Construct a slower term.List which can represent tail as well
+  // Construct a term.Pid
   Py::Callable pid_class(term_mod_.getAttr("Pid"));
   auto ctor_args = Py::TupleN(node,
                               Py::Long((unsigned long) id),
