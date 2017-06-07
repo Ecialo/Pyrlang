@@ -240,6 +240,8 @@ def binary_to_term_2(data: bytes, options: dict = {}):
         return util.i32(data, 1), data[5:]
 
     if tag == TAG_PID_EXT:
+        if len(data) < 10:
+            return incomplete_data("decoding ext pid")
         node, tail = binary_to_term_2(data[1:])
         id1 = util.u32(tail, 0)
         serial = util.u32(tail, 4)

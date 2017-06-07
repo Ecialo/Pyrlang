@@ -11,3 +11,6 @@ build:
 test: build
 	$(PY) test/dist_etf_decode_test.py && \
 	$(PY) test/dist_etf_transitive_test.py
+
+test-debug: build
+	gdb --args $(PY) test/dist_etf_decode_test.py

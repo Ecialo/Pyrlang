@@ -48,6 +48,22 @@ class TestETFEncode(unittest.TestCase):
         self.assertEqual(val1, val2)
         self.assertEqual(tail, b'')
 
+    def test_uint8(self):
+        """ Encode and decode a byte and compare results """
+        val1 = 170
+        data1 = etf.term_to_binary(val1)
+        (val2, tail) = etf.binary_to_term(data1)
+        self.assertEqual(val1, val2)
+        self.assertEqual(tail, b'')
+
+    def test_int32(self):
+        """ Encode and decode a byte and compare results """
+        val1 = 170123456
+        data1 = etf.term_to_binary(val1)
+        (val2, tail) = etf.binary_to_term(data1)
+        self.assertEqual(val1, val2)
+        self.assertEqual(tail, b'')
+
     def test_binary(self):
         """ Encode and decode binary immediately and compare results """
         data1 = bytes([131, 109, 0, 0, 0, 1, 34])

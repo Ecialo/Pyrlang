@@ -93,6 +93,9 @@ private:
   B2TResult _decode_list(const std::string& input_str, size_t index,
                          const B2TOptions& options, const char* ptr,
                          size_t input_length);
+
+  B2TResult _decode_tuple(const std::string& input_str, size_t index,
+                          const B2TOptions& options, int tuple_size);
 };
 
 //class ETFDecodeException: public Py::BaseException {

@@ -77,11 +77,75 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
       return _decode_list(input_str, index, options, ptr, input_length);
     }
 
+    case TAG_SMALL_TUPLE_EXT: {
+      if (input_length < 2) {
+        return incomplete_data("decoding length for a small tuple");
+      }
+      int tuple_size = ptr[1];
+      return _decode_tuple(input_str, index + 2, options, tuple_size);
+    }
+
+    case TAG_LARGE_TUPLE_EXT: {
+      if (input_length < 5) {
+        return incomplete_data("decoding length for a large tuple");
+      }
+      int tuple_size = codec::read_big_u32(ptr + 1);
+      return _decode_tuple(input_str, index + 6, options, tuple_size);
+    }
+
+    case TAG_SMALL_INT: {
+      // 8-bit unsigned
+      int val = (int)(uint8_t)ptr[1]; // chars are signed, we want a byte
+      return std::make_pair((Py::Object)Py::Long(val), index + 2);
+    }
+
+    case TAG_INT: {
+      // 32-bit signed
+      int32_t val = (int32_t)codec::read_big_u32(ptr + 1);
+      return std::make_pair((Py::Object)Py::Long(val), index + 5);
+    }
+
+    case TAG_PID_EXT: {
+      if (input_length < 10) {
+        return incomplete_data("decoding ext pid");
+      }
+      Py::Object node;
+      std::tie(node, index) = binary_to_term_native(input_str,
+                                                    index + 1, // skip the tag
+                                                    options);
+      ptr = input_str.data() + index;
+      uint32_t id = codec::read_big_u32(ptr);
+      uint32_t serial = codec::read_big_u32(ptr + 4);
+      uint8_t creation = (uint8_t)ptr[8];
+
+      // Construct a slower term.List which can represent tail as well
+      Py::Callable pid_class(term_mod_.getAttr("Pid"));
+      auto ctor_args = Py::TupleN(node,
+                                  Py::Long((unsigned long)id),
+                                  Py::Long((unsigned long)serial),
+                                  Py::Long(creation));
+      return std::make_pair(pid_class.apply(ctor_args),
+                            index + 9); // skip id, serial, creation
+    }
+
     default:
       break;
   }
 
   return etf_error("Unknown tag %d", tag);
+}
+
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_tuple(const std::string& input_str, size_t index,
+                               const B2TOptions& options, int tuple_size) {
+  auto result = Py::Tuple(tuple_size); // Tuple ctor uses int, so we do too
+  for (int i = 0; i < tuple_size; ++i) {
+    Py::Object item;
+    std::tie(item, index) = binary_to_term_native(input_str, index, options);
+    result.setItem(i, item);
+  }
+  return std::make_pair((Py::Object) result, index);
 }
 
 
@@ -114,7 +178,7 @@ NativeETFModule::_decode_list(const std::string& input_str, size_t index,
 
   // Construct a slower term.List which can represent tail as well
   Py::Callable list_class(term_mod_.getAttr("List"));
-  return std::make_pair(list_class.apply(TupleN(result, tail)),
+  return std::make_pair(list_class.apply(Py::TupleN(result, tail)),
                         index);
 }
 

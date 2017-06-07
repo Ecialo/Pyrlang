@@ -33,6 +33,22 @@ class TestETFDecode(unittest.TestCase):
         self.assertEqual(t1, "hello")
         self.assertEqual(tail, b'')
 
+    def test_decode_uint8(self):
+        """ Try a byte """
+        b1 = bytes([131, 97, 170])
+        (t1, tail) = etf.binary_to_term(b1)
+        self.assertTrue(isinstance(t1, int))
+        self.assertEqual(t1, 170)
+        self.assertEqual(tail, b'')
+
+    def test_decode_int32(self):
+        """ Try a longer integer that fits into 32-bit signed """
+        b1 = bytes([131, 98, 10, 35, 224, 192])
+        (t1, tail) = etf.binary_to_term(b1)
+        self.assertTrue(isinstance(t1, int))
+        self.assertEqual(t1, 170123456)
+        self.assertEqual(tail, b'')
+
     def test_decode_list_1(self):
         """ Try decode a list with a single atom 'derp' """
         b1 = bytes([131, 108, 0, 0, 0, 1, 100, 0, 4, 100, 101, 114, 112, 106])
