@@ -239,7 +239,7 @@ def binary_to_term_2(data: bytes, options: dict = None):
             return incomplete_data("decoding length for a binary")
         len_expected = util.u32(data, 1) + 5
         if len_expected > len_data:
-            return incomplete_data("decoding data for a binary")
+            return incomplete_data("reading data for a binary")
 
         if options.get("simple_binaries", True):
             return data[5:len_expected], data[len_expected:]

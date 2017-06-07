@@ -21,8 +21,8 @@
     *   "simple_lists", default True. Returns Erlang lists as Python lists,
         set this to False and term.List object will be returned which is able
         to also store list tail and convert contents to Unicode string.
-    *   "simple_binaries", default False. Ignores bit tail of bit strings and
-        returns all Erlang binaries as Python bytes.
+    *   "simple_binaries", default True. Ignores bit tail of bit strings and
+        returns all Erlang binaries and bit strings as Python bytes.
     *   "atoms_as_strings", default False. Always converts atoms to Python
         strings. This is potentially faster than using the Atom wrapper class.
 """

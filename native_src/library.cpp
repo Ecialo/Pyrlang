@@ -125,11 +125,61 @@ NativeETFModule::binary_to_term_native(const std::string& input_str,
       return std::make_pair((Py::Object)Py::Float(val), index + 9);
     }
 
+    case TAG_BINARY_EXT: {
+      constexpr auto PREFIX_SIZE = 5;
+      if (input_length < PREFIX_SIZE) {
+        return incomplete_data("decoding length for a binary");
+      }
+
+      auto len_expected = codec::read_big_u32(ptr + 1);
+
+      return _decode_binary(index, options, ptr, input_length, len_expected,
+                            PREFIX_SIZE, 8);
+    }
+
+    case TAG_BIT_BINARY_EXT: {
+      constexpr auto PREFIX_SIZE = 6;
+      if (input_length < PREFIX_SIZE) {
+        return incomplete_data("decoding length for a bit-binary");
+      }
+
+      auto len_expected = codec::read_big_u32(ptr + 1);
+      auto last_byte_bits = ptr[5];
+
+      return _decode_binary(index, options, ptr, input_length, len_expected,
+                            PREFIX_SIZE, last_byte_bits);
+    }
+
     default:
       break;
   }
 
   return etf_error("Unknown tag %d", tag);
+}
+
+NativeETFModule::B2TResult
+NativeETFModule::_decode_binary(size_t index, const B2TOptions& options,
+                                const char* ptr, size_t input_length,
+                                uint32_t len_expected, const int offset,
+                                const int last_byte_bits) {
+  if (len_expected + offset > input_length) {
+    return incomplete_data("reading data for a binary");
+  }
+
+  Py::Bytes binary_data(ptr + offset, len_expected);
+
+  if (options.simple_binaries) {
+    return std::make_pair((Py::Object) binary_data,
+                          index + offset + len_expected);
+  }
+
+  // Create a term.Binary object
+  // Construct a term.Reference
+  Py::Callable bin_class(term_mod_.getAttr("Binary"));
+  auto ctor_args = Py::TupleN(binary_data,
+                              Py::Long(last_byte_bits));
+  return std::make_pair(bin_class.apply(ctor_args),
+                        index + offset + len_expected);
 }
 
 
@@ -160,11 +210,11 @@ NativeETFModule::_decode_ref(const std::string& input_str, size_t index,
   Py::Bytes id_data(ptr + 1, id_data_byte_size);
 
   // Construct a term.Reference
-  Py::Callable pid_class(term_mod_.getAttr("Reference"));
+  Py::Callable ref_class(term_mod_.getAttr("Reference"));
   auto ctor_args = Py::TupleN(node,
                               Py::Long(creation),
                               id_data);
-  return std::make_pair(pid_class.apply(ctor_args),
+  return std::make_pair(ref_class.apply(ctor_args),
                         index + 1 +
                         id_data_byte_size); // skip creation, id_data
 }

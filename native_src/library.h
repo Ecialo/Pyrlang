@@ -108,6 +108,11 @@ private:
   B2TResult _decode_ref(const std::string& input_str, size_t index,
                         const B2TOptions& options, const char* ptr,
                         size_t input_length);
+
+  B2TResult _decode_binary(size_t index, const B2TOptions& options,
+                           const char* ptr, size_t input_length,
+                           uint32_t len_expected, const int offset,
+                           const int last_byte_bits);
 };
 
 //class ETFDecodeException: public Py::BaseException {

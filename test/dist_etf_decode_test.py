@@ -137,6 +137,17 @@ class TestETFDecode_Python(unittest.TestCase):
         self.assertEqual(tail1, b'')
         self.assertEqual(tail2, b'')
 
+    def test_decode_bit_binary(self):
+        """ Decode bit-binary to term.Binary and to Python bytes and
+            compare. """
+        data1 = bytes([131, 77, 0, 0, 0, 2, 4, 255, 240])
+        (val1, tail1) = etf.binary_to_term(data1, {"simple_binaries": False})
+        (val2, tail2) = etf.binary_to_term(data1)
+        self.assertEqual(val1.last_byte_bits_, 4)
+        self.assertEqual(val1.bytes_, val2)
+        self.assertEqual(tail1, b'')
+        self.assertEqual(tail2, b'')
+
 
 class TestETFDecode_Native(TestETFDecode_Python):
     def setUp(self):
