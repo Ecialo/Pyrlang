@@ -73,4 +73,11 @@ uint64_t read_big_u64(const char* ptr) {
   return r;
 }
 
+
+double read_big_float64(const char* ptr) {
+  uint64_t r = big_to_native(
+    unaligned_read<uint64_t>(ptr));
+  return *((double *)&r); // Boom!
+}
+
 } // ns codec
