@@ -64,7 +64,7 @@ def _handle_socket_read(handler, sock):
 
                     collected = collected1
             else:
-                handler.handle_inbox()
+                handler._handle_inbox()
                 # HACK to keep idle CPU down to 0.3% while
                 # trying to maintain lower latency
                 select.select([sock], [], [], 1.0)

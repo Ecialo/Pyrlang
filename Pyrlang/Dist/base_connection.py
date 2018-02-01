@@ -15,18 +15,17 @@
 """ Base abstract Distribution connection class
 """
 
-from __future__ import print_function
-
+import asyncio
 import struct
 from abc import abstractmethod
 from hashlib import md5
 from typing import Union
+import logging
 
-from Pyrlang import logger, mailbox, Term
+from Pyrlang import Term
 from Pyrlang.Dist import util, etf
 
-LOG = logger.nothing
-ERROR = logger.tty
+logger = logging.getLogger(__name__)
 
 # Distribution protocol delivers pairs of (control_term, message).
 # http://erlang.org/doc/apps/erts/erl_dist_protocol.html
@@ -70,7 +69,7 @@ class BaseConnection:
         self.addr_ = None
 
         # refer to util.make_handler_in which reads this
-        self.inbox_ = mailbox.Mailbox()
+        self.inbox_ = asyncio.Queue()
         """ Inbox is used to ask the connection to do something. """
 
         self.peer_distr_version_ = (None, None)
@@ -146,7 +145,7 @@ class BaseConnection:
     def _send_packet4(self, content: bytes):
         """ Send a connection-time status message with a 4 byte length prefix
         """
-        LOG("Dist: pkt out", content)
+        logger.debug("Dist: pkt out", content)
         msg = struct.pack(">I", len(content)) + content
         self.socket_.sendall(msg)
 
@@ -155,7 +154,7 @@ class BaseConnection:
         """ On incoming 'p' message with control and data, handle it.
             :raises DistributionError: when 'p' message is not a tuple
         """
-        LOG("Passthrough msg %s\n%s" % (control_term, msg_term))
+        logger.debug("Passthrough msg %s\n%s" % (control_term, msg_term))
 
         if type(control_term) != tuple:
             raise DistributionError("In a 'p' message control term must be a "
@@ -187,7 +186,7 @@ class BaseConnection:
                                               target=target)
 
         else:
-            ERROR("Unhandled 'p' message: %s\n%s" % (control_term, msg_term))
+            logger.error("Unhandled 'p' message: %s\n%s" % (control_term, msg_term))
 
     def handle_inbox(self):
         while True:
@@ -201,17 +200,17 @@ class BaseConnection:
         if m[0] == 'send':
             (_, from_pid, dst, msg) = m
             ctrl = self._control_term_send(from_pid=from_pid, dst=dst)
-            LOG("Connection: control msg %s; %s" % (ctrl, msg))
+            logger.debug("Connection: control msg %s; %s" % (ctrl, msg))
             return self._control_message(ctrl, msg)
 
         elif m[0] == 'monitor_p_exit':
             (_, from_pid, to_pid, ref, reason) = m
             ctrl = (CONTROL_TERM_MONITOR_P_EXIT,
                     from_pid, to_pid, ref, reason)
-            LOG("Monitor proc exit: %s with %s" % (from_pid, reason))
+            logger.debug("Monitor proc exit: %s with %s" % (from_pid, reason))
             return self._control_message(ctrl, None)
 
-        ERROR("Connection: Unhandled message to InConnection %s" % m)
+        logger.error("Connection: Unhandled message to InConnection %s" % m)
 
     @staticmethod
     def _control_term_send(from_pid, dst):
@@ -238,7 +237,7 @@ class BaseConnection:
         return result
 
     def protocol_error(self, msg) -> bool:
-        ERROR("Dist protocol error: %s (state %s)" % (msg, self.state_))
+        logger.error("Dist protocol error: %s (state %s)" % (msg, self.state_))
         return False
 
     @staticmethod
@@ -276,10 +275,10 @@ class BaseConnection:
 
         return True
 
-    def report_dist_connected(self):
+    async def report_dist_connected(self):
         assert(self.peer_name_ is not None)
-        LOG("Dist: connected to", self.peer_name_)
-        self.node_.inbox_.put(('node_connected', self.peer_name_, self))
+        logger.debug("Dist: connected to", self.peer_name_)
+        await self.node_.inbox_.put(('node_connected', self.peer_name_, self))
 
 
 __all__ = ['BaseConnection', 'DistributionError']

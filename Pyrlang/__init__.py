@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from Pyrlang.mailbox import Mailbox
 from Pyrlang.node import Node, NodeException
 from Pyrlang.process import Process
 
@@ -25,6 +24,6 @@ from Pyrlang.Term.reference import Reference
 from Pyrlang.Term.fun import Fun
 
 
-__all__ = ['Node', 'NodeException', 'Process', 'Mailbox',
+__all__ = ['Node', 'NodeException', 'Process',
            'Term',
            'Atom', 'Fun', 'BitString', 'ImproperList', 'Pid', 'Reference']

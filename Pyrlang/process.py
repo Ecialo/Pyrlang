@@ -14,15 +14,16 @@
 
 from __future__ import print_function
 
-import gevent
-from gevent import Greenlet
+import asyncio
+import logging
 from typing import Set
 
-from Pyrlang import mailbox
 from Pyrlang.Term.pid import Pid
 
+logger = logging.getLogger(__name__)
 
-class Process(Greenlet):
+
+class Process:
     """ Implements Erlang process semantic and lifetime.
         Registers itself in the process registry, can receive and send messages.
         To optionally register self with a name, call
@@ -34,11 +35,10 @@ class Process(Greenlet):
 
             :param node: 
         """
-        Greenlet.__init__(self)
         self.node_ = node
         """ Convenience field to see the Node. """
 
-        self.inbox_ = mailbox.Mailbox()
+        self.inbox_ = asyncio.Queue()
         """ Message queue (gevent.Queue). Messages are detected by the ``_run``
             loop and handled one by one in ``handle_one_inbox_message()``. 
         """
@@ -60,14 +60,13 @@ class Process(Greenlet):
         self.monitor_targets_ = set() # type: Set[Pid]
         """ Who we monitor. """
 
-        self.start() # greenlet has to be scheduled for run
+        asyncio.get_event_loop().create_task(self._process_loop())
 
-    def _run(self):
+    async def _process_loop(self):
         while not self.is_exiting_:
-            self.handle_inbox()
-            gevent.sleep(0)
+            await self._handle_inbox()
 
-    def handle_inbox(self):
+    async def _handle_inbox(self):
         """ Do not override `handle_inbox`, instead go for
             `handle_one_inbox_message`
         """
@@ -75,15 +74,14 @@ class Process(Greenlet):
             # Block, but then gevent will allow other green-threads to
             # run, so rather than unnecessarily consuming CPU block
             msg = self.inbox_.get()
-            #msg = self.inbox_.receive(filter_fn=lambda _: True)
-            print("%s: handle_inbox %s" % (self, msg))
+            logger.debug("%s: handle_inbox %s" % (self, msg))
             if msg is None:
                 break
             self.handle_one_inbox_message(msg)
 
     def handle_one_inbox_message(self, msg):
         """ Override this method to handle new incoming messages. """
-        print("%s: Handling msg %s" % (self.pid_, msg))
+        logger.debug("%s: Handling msg %s" % (self.pid_, msg))
 
     def exit(self, reason=None):
         """ Marks the object as exiting with the reason, informs links and

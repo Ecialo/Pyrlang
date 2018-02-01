@@ -18,17 +18,14 @@
 
 from __future__ import print_function
 
-import gevent
-from gevent.server import StreamServer
+import asyncio
+import logging
 
-from Pyrlang import logger
 from Pyrlang.Dist import helpers
 from Pyrlang.Dist.epmd import EPMDClient, EPMDConnectionError
 from Pyrlang.Dist.out_connection import OutConnection
 
-LOG = logger.nothing
-WARN = logger.nothing
-ERROR = logger.tty
+logger = logging.getLogger(__name__)
 
 
 class ErlangDistribution:
@@ -46,24 +43,29 @@ class ErlangDistribution:
             newly connected nodes. 
         """
 
+        self.in_srv_ = None
+        asyncio.get_event_loop().create_task(self._start_listening(node))
+
+        self.epmd_ = EPMDClient()
+
+    async def _start_listening(self, node):
         # Listener for Incoming connections from other nodes
         # Create handler using make_handler_in helper
         proto_kwargs = {"node": node}
 
         from Pyrlang.Dist.in_connection import InConnection
-        handler = helpers.make_handler_in(receiver_class=InConnection,
-                                          args=[],
-                                          kwargs=proto_kwargs)
+        handler_fn = helpers.make_handler_in(receiver_class=InConnection,
+                                             args=[],
+                                             kwargs=proto_kwargs)
 
-        self.in_srv_ = StreamServer(listener=('0.0.0.0', 0),
-                                    handle=handler)
-        self.in_srv_.start()
-        self.in_port_ = self.in_srv_.server_port
-        print("Dist: Listening for dist connections on port", self.in_port_)
+        self.in_srv_ = await asyncio.start_server(handler_fn, '0.0.0.0', 0)
+        # Dark magic to determine randomly assigned port
+        self.in_port_ = self.in_srv_.sockets[0].getsockname()[1]
 
-        self.epmd_ = EPMDClient()
+        logger.info("Dist: Listening for dist connections on port %d"
+                    % self.in_port_)
 
-    def connect(self, node) -> bool:
+    async def connect_epmd(self, _node) -> bool:
         """ Looks up EPMD daemon and connects to it trying to discover other 
             Erlang nodes.
         """
@@ -71,7 +73,7 @@ class ErlangDistribution:
             if self.epmd_.connect():
                 return self.epmd_.alive2(self)
 
-            gevent.sleep(5)
+            asyncio.sleep(5.0)
 
     def disconnect(self) -> None:
         """ Finish EPMD connection, this will remove the node from the list of
@@ -99,7 +101,7 @@ class ErlangDistribution:
             return handler
 
         except Exception as e:
-            ERROR("Dist:", e)
+            logger.error("Dist:", e)
             return None
 
 

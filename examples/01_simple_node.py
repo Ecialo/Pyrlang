@@ -6,20 +6,19 @@
 #               `erl -name erl@127.0.0.1 -setcookie COOKIE`
 # Run:          from project root run `make example1`
 #
+import asyncio
+
+# for Pyrlang tests: help Python find Pyrlang in this dir
 import sys
 sys.path.insert(0, ".")
-
-import gevent
-
-from gevent import monkey
-monkey.patch_all()
 
 from Pyrlang import Node, Atom
 
 
 def main():
+    ev_loop = asyncio.get_event_loop()
+
     node = Node("py@127.0.0.1", "COOKIE")
-    node.start()
 
     # Attempt to send something will initiate a connection before sending
     pid = node.register_new_process(None)
@@ -27,9 +26,7 @@ def main():
     # name: `erlang:register(shell, self()).`
     node.send(pid, (Atom('erl@127.0.0.1'), Atom('shell')), Atom('hello'))
 
-    while True:
-        # Sleep gives other greenlets time to run
-        gevent.sleep(0.1)
+    ev_loop.run_forever()
 
 
 if __name__ == "__main__":

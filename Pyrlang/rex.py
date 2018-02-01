@@ -15,11 +15,14 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
+import logging
 import traceback
 
 from Pyrlang import Term, gen
 from Pyrlang.process import Process
 from Pyrlang.node import Node
+
+logger = logging.getLogger(__name__)
 
 
 class Rex(Process):
@@ -52,7 +55,7 @@ class Rex(Process):
         """
         gencall = gen.parse_gen_call(msg)
         if isinstance(gencall, str):
-            print("REX:", gencall)
+            logger.debug("REX:", gencall)
             return
 
         # Find and run the thing
@@ -75,6 +78,3 @@ class Rex(Process):
 
             gencall.reply_exit(local_pid=self.pid_,
                                reason=excpt)
-
-
-__all__ = ['Rex']

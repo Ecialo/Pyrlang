@@ -15,9 +15,13 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
+import logging
+
 from Pyrlang import Term, gen
 from Pyrlang.process import Process
 from Pyrlang.node import Node
+
+logger = logging.getLogger(__name__)
 
 
 class NetKernel(Process):
@@ -32,7 +36,7 @@ class NetKernel(Process):
     def handle_one_inbox_message(self, msg):
         gencall = gen.parse_gen_message(msg)
         if not isinstance(gencall, gen.GenIncomingMessage):
-            print("NetKernel:", gencall)
+            logging.debug("NetKernel:", gencall)
             return
 
         # Incoming gen_call packet to net_kernel, might be that net_adm:ping
@@ -42,7 +46,7 @@ class NetKernel(Process):
             gencall.reply(local_pid=self.pid_,
                           result=Term.Atom('yes'))
         else:
-            print("NetKernel: unknown message", msg)
+            logger.warning("NetKernel: unknown message", msg)
 
 
 __all__ = ['NetKernel']

@@ -14,28 +14,24 @@
 
 from __future__ import print_function
 
-import gevent
-from gevent import Greenlet
+import asyncio
+import logging
 
 from typing import Dict, Union
 
-from Pyrlang import logger, mailbox
 from Pyrlang.Term import *
 from Pyrlang.Dist.distribution import ErlangDistribution
 from Pyrlang.Dist.node_opts import NodeOpts
 from Pyrlang.process import Process
 
-LOG = logger.tty
-DEBUG = logger.nothing
-WARN = logger.nothing
-ERROR = logger.tty
+logger = logging.getLogger(__name__)
 
 
 class NodeException(Exception):
     pass
 
 
-class Node(Greenlet):
+class Node:
     """ Implements an Erlang node which has a network name, a dictionary of 
         processes and registers itself via EPMD.
         Node handles the networking asynchronously.
@@ -64,74 +60,70 @@ class Node(Greenlet):
     """ Access this to find the current node. This may change in future. """
 
     def __init__(self, name: str, cookie: str) -> None:
-        Greenlet.__init__(self)
-
         if Node.singleton is not None:
             raise NodeException("Singleton Node was already created")
         Node.singleton = self
 
-        # Message queue based on ``gevent.Queue``. It is periodically checked
-        # in the ``_run`` method and the receive handler is called.
-        self.inbox_ = mailbox.Mailbox()
+        self.inbox_ = asyncio.Queue()
+        """ Message queue based on ``gevent.Queue``. It is periodically checked
+            in the ``_run`` method and the receive handler is called. """
 
-        # An internal counter used to generate unique process ids
         self.pid_counter_ = 0
+        """ An internal counter used to generate unique process ids. """
 
-        # Process dictionary which stores all the existing ``Process`` objects
-        # adressable by a pid.
-        #
-        # .. note:: This creates a python reference to an
-        #     object preventing its automatic garbage collection.
-        #     In the end of its lifetime an object must be explicitly removed
-        #     from this dictionary using ``Process.exit`` method on the
-        #     process.
-        self.processes_ = {} # type: Dict[Pid, Process]
+        self.processes_ = {}  # type: Dict[Pid, Process]
+        """ Process dictionary which stores all the existing ``Process`` objects
+            adressable by a pid.
+        
+            .. note:: This creates a python reference to an
+                object preventing its automatic garbage collection.
+                In the end of its lifetime an object must be explicitly removed
+                from this dictionary using ``Process.exit`` method on the
+                process. """
 
-        # Registered objects dictionary, which maps atoms to pids
-        self.reg_names_ = {} # type: Dict[Atom, Pid]
+        self.reg_names_ = {}  # type: Dict[Atom, Pid]
+        """ Registered objects dictionary, which maps atoms to pids """
 
         self.is_exiting_ = False
 
-        # An option object with feature support flags packed into an
-        # integer.
         self.node_opts_ = NodeOpts(cookie=cookie)
+        """ An option object with feature support flags packed into an
+            integer. """
 
-        # Node name as seen on the network. Use full node names here:
-        # ``name@hostname``
         self.name_ = Atom(name)
+        """ Node name as seen on the network. Use full node names here:
+            ``name@hostname`` """
 
-        self.dist_nodes_ = {} # type: Dict[str, Node]
+        self.dist_nodes_ = {}  # type: Dict[str, Node]
+
         self.dist_ = ErlangDistribution(node=self, name=name)
 
-        # This is important before we can begin spawning processes
-        # to get the correct node creation
-        self.dist_.connect(self)
-
-        # Spawn and register (automatically) the process 'rex' for remote
-        # execution, which takes 'rpc:call's from Erlang
         from Pyrlang.rex import Rex
         self.rex_ = Rex(self)
-        self.rex_.start()
+        """ Spawn and register (automatically) the process 'rex' for remote
+            execution, which takes 'rpc:call's from Erlang """
 
-        # Spawn and register (automatically) the 'net_kernel' process which
-        # handles special ping messages
         from Pyrlang.net_kernel import NetKernel
         self.net_kernel_ = NetKernel(self)
-        self.net_kernel_.start()
+        """ Spawn and register (automatically) the 'net_kernel' process which
+            handles special ping messages """
 
-    def _run(self):
+        asyncio.get_event_loop().create_task(self._node_loop())
+
+    async def _node_loop(self):
+        # This is important before we can begin spawning processes
+        # to get the correct node creation.
+        await self.dist_.connect_epmd(self)
+
         while not self.is_exiting_:
             self.handle_inbox()
-            gevent.sleep(0.0)
 
-    def handle_inbox(self):
+    async def handle_inbox(self):
         while True:
-            # Block, but then gevent will allow other green-threads to
-            # run, so rather than unnecessarily consuming CPU block
-            msg = self.inbox_.get()
-            # msg = self.inbox_.receive(filter_fn=lambda _: True)
+            msg = await self.inbox_.get()
             if msg is None:
                 break
+
             self.handle_one_inbox_message(msg)
 
     def handle_one_inbox_message(self, m: tuple):
@@ -168,9 +160,9 @@ class Node(Greenlet):
             self.processes_[pid1] = proc
         return pid1
 
-    def on_exit_process(self, pid, reason):
-        LOG("Process %s exited with %s", pid, reason)
-        del self.processes_[pid]
+    def on_exit_process(self, exited_pid: Pid, reason):
+        logger.debug("Process %s exited with %s", exited_pid, reason)
+        del self.processes_[exited_pid]
 
     def register_name(self, proc, name) -> None:
         """ Add a name into registrations table (automatically removed when the
@@ -214,10 +206,12 @@ class Node(Greenlet):
 
         receiver_obj = self.where_is(receiver)
         if receiver_obj is not None:
-            LOG("Node: send local reg=%s receiver=%s msg=%s" % (receiver, receiver_obj, message))
+            logger.debug("Node: send local reg=%s receiver=%s msg=%s"
+                         % (receiver, receiver_obj, message))
             receiver_obj.inbox_.put(message)
         else:
-            WARN("Node: send to unregistered name %s ignored" % receiver)
+            logger.warning("Node: send to unregistered name %s ignored"
+                           % receiver)
 
     def _send_local(self, receiver, message) -> None:
         """ Try find a process by pid and drop a message into its ``inbox_``.
@@ -230,12 +224,12 @@ class Node(Greenlet):
 
         dst = self.where_is(receiver)
         if dst is not None:
-            DEBUG("Node._send_local: pid %s <- %s" % (receiver, message))
+            logger.debug("Node._send_local: pid %s <- %s" % (receiver, message))
             dst.inbox_.put(message)
         else:
-            WARN("Node._send_local: pid %s does not exist" % receiver)
+            logger.warning("Node._send_local: pid %s does not exist" % receiver)
 
-    def send(self, sender, receiver, message) -> None:
+    async def send(self, sender, receiver, message) -> None:
         """ Deliver a message to a pid or to a registered name. The pid may be
             located on another Erlang node.
 
@@ -248,39 +242,41 @@ class Node(Greenlet):
                 inbox. Pyrlang processes use tuples but that is not enforced
                 for your own processes.
         """
-        DEBUG("send -> %s: %s" % (receiver, message))
+        logger.debug("send -> %s: %s" % (receiver, message))
 
         if isinstance(receiver, tuple):
             (r_node, r_name) = receiver
             if r_node == self.name_:  # atom compare
                 # re-route locally
-                return self.send(sender, r_name, message)
+                return await self.send(sender, r_name, message)
             else:
                 # route remotely
-                return self._send_remote(sender=sender,
-                                         dst_node=str(r_node),
-                                         receiver=r_name,
-                                         message=message)
+                return await self._send_remote(sender=sender,
+                                               dst_node=str(r_node),
+                                               receiver=r_name,
+                                               message=message)
 
         if isinstance(receiver, Pid):
             if receiver.is_local_to(self):
                 return self._send_local(receiver, message)
             else:
-                return self._send_remote(sender=sender,
-                                         dst_node=str(receiver.node_),
-                                         receiver=receiver,
-                                         message=message)
+                return await self._send_remote(sender=sender,
+                                               dst_node=str(receiver.node_),
+                                               receiver=receiver,
+                                               message=message)
 
         if isinstance(receiver, Atom):
             return self._send_local_registered(receiver, message)
 
         raise NodeException("Don't know how to send to %s" % receiver)
 
-    def _send_remote(self, sender, dst_node: str, receiver, message) -> None:
-        DEBUG("Node._send_remote %s <- %s" % (receiver, message))
+    async def _send_remote(self, sender,
+                           dst_node: str,
+                           receiver, message) -> None:
+        logger.debug("Node._send_remote %s <- %s" % (receiver, message))
         m = ('send', sender, receiver, message)
-        return self.dist_command(receiver_node=dst_node,
-                                 message=m)
+        return await self.dist_command(receiver_node=dst_node,
+                                       message=m)
 
     def get_cookie(self):
         """ Get string cookie value for this node.
@@ -288,7 +284,7 @@ class Node(Greenlet):
         """
         return self.node_opts_.cookie_
 
-    def dist_command(self, receiver_node: str, message: tuple) -> None:
+    async def dist_command(self, receiver_node: str, message: tuple) -> None:
         """ Locate the connection to the given node (a string).
             Place a tuple crafted by the caller into message box for Erlang
             distribution socket. It will pick up and handle the message whenever
@@ -299,7 +295,7 @@ class Node(Greenlet):
                 values
         """
         if receiver_node not in self.dist_nodes_:
-            LOG("Node: connect to node", receiver_node)
+            logger.info("Node: connect to node", receiver_node)
             handler = self.dist_.connect_to_node(
                 this_node=self,
                 remote_node=receiver_node)
@@ -308,14 +304,11 @@ class Node(Greenlet):
                 raise NodeException("Node not connected %s" % receiver_node)
 
             # block until connected, and get the connected message
-            LOG("Node: wait for 'node_connected'")
-            # msg = self.inbox_.receive_wait(
-            #     filter_fn=lambda m: m[0] == 'node_connected'
-            # )
+            logger.debug("Node: wait for 'node_connected'")
             while receiver_node not in self.dist_nodes_:
-                gevent.sleep(0.1)
+                asyncio.sleep(0.1)
 
-            LOG("Node: connected")
+            logger.info("Node: connected")
 
         conn = self.dist_nodes_[receiver_node]
         conn.inbox_.put(message)
@@ -332,7 +325,8 @@ class Node(Greenlet):
             :param target: Name or pid of a monitor target process
        """
         target_proc = self.where_is(target)
-        LOG("MonitorP: orig=%s targ=%s -> %s" % (origin, target, target_proc))
+        logger.debug("MonitorP: orig=%s targ=%s -> %s"
+                     % (origin, target, target_proc))
         if target_proc is not None:
             target_proc.monitors_.add(origin)
         else:

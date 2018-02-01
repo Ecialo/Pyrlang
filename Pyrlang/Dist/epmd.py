@@ -16,14 +16,11 @@
     EPMD is a daemon application, part of Erlang/OTP which registers Erlang
     nodes on the local machine and helps nodes finding each other.
 """
+import asyncio
+import logging
 import struct
-from typing import Union
-
-import gevent
 import sys
-from gevent import socket
 
-from Pyrlang import logger
 from Pyrlang.Dist import util, dist_protocol
 
 NODE_HIDDEN = 77
@@ -40,9 +37,7 @@ PY3 = sys.version_info[0] >= 3
 EPMD_DEFAULT_PORT = 4369
 EPMD_REMOTE_DEFAULT_TIMEOUT = 5.0
 
-LOG = logger.nothing
-WARN = logger.nothing
-ERROR = logger.tty
+logger = logging.getLogger(__name__)
 
 
 class EPMDClientError(Exception):
@@ -73,24 +68,23 @@ class EPMDClient:
         self.sock_.close()
         self.sock_ = None
 
-    def connect(self) -> bool:
+    async def connect(self) -> bool:
         """ Establish a long running connection to EPMD, will not return until
             the connection has been established.
 
             :return: True
         """
         while True:
-            try:
-                print("EPMD: Connecting %s:%d" % (self.host_, self.port_))
-                host_port = (self.host_, self.port_)
-                self.sock_ = socket.create_connection(address=host_port,
-                                                      timeout=5.0)
-                break  # the connect loop
+            # try:
+            print("EPMD: Connecting %s:%d" % (self.host_, self.port_))
+            self.sock_ = asyncio.open_connection(host=self.host_,
+                                                 port=self.port_)
+            break  # the connect loop
 
-            except socket.error as err:
-                print("EPMD: connection error:", err,
-                      ". Is local EPMD running? Try `epmd -daemon`")
-                gevent.sleep(5)
+            # except socket.error as err:
+            #     print("EPMD: connection error:", err,
+            #           ". Is local EPMD running? Try `epmd -daemon`")
+            #     asyncio.sleep(5.0)
 
         print("EPMD: Socket connected")
         return True

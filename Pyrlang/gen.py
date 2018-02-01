@@ -59,10 +59,13 @@ class GenIncomingCall(GenBase):
         GenBase.__init__(self, sender=sender, ref=ref)
         self.mod_ = mod
         """ Module name as atom. """
+
         self.fun_ = fun
         """ Function name as atom. """
+
         self.args_ = args
         """ Call arguments as a ``term.List`` object. """
+
         self.group_leader_ = group_leader
         """ Remote group leader pid, comes in as a part of message. """
 
