@@ -6,15 +6,13 @@
 # Run `make example10a` to run Python node
 # Run `make example10b` to run Elixir client which will perform the call
 #
-
+import asyncio
 import sys
 sys.path.insert(0, ".")
 
-import gevent
-from gevent import monkey
-monkey.patch_all()
-import Pyrlang
-from Pyrlang import Atom, Process, gen
+from pyrlang.term.atom import Atom
+from pyrlang.process import Process
+from pyrlang import gen
 
 
 class MyProcess(Process):
@@ -35,17 +33,18 @@ class MyProcess(Process):
         gencall.reply(local_pid=self.pid_, result=self.pid_)
 
 
-def main():
-    node = Pyrlang.Node("py@127.0.0.1", "COOKIE")
+async def main():
+    node = PyrlangGevent.Node("py@127.0.0.1", "COOKIE")
     node.start()
 
     mp = MyProcess(node)
 
     while True:
         # Sleep gives other greenlets time to run
-        gevent.sleep(0.5)
+        await asyncio.sleep(0.5)
 
 
 if __name__ == "__main__":
-    main()
-
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    loop.close()

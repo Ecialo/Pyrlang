@@ -12,31 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
-
-import gevent
-from gevent import Greenlet
-
+import asyncio
+import logging
 from typing import Dict, Union
 
-from Pyrlang import logger, mailbox
-from Pyrlang.Term import *
-from Pyrlang.Dist.distribution import ErlangDistribution
-from Pyrlang.Dist.node_opts import NodeOpts
-from Pyrlang.process import Process
+from pyrlang.dist.distribution import ErlangDistribution
+from pyrlang.dist.node_opts import NodeOpts
+from pyrlang.term.pid import Pid
+from pyrlang.term.atom import Atom
+from pyrlang import process
 
-LOG = logger.tty
-DEBUG = logger.nothing
-WARN = logger.nothing
-ERROR = logger.tty
+LOG = logging.info
+WARN = logging.warning
+DEBUG = logging.debug
 
 
 class NodeException(Exception):
     pass
 
 
-class Node(Greenlet):
-    """ Implements an Erlang node which has a network name, a dictionary of 
+class Node:
+    """ Implements an Erlang node which has a network name, a dictionary of
         processes and registers itself via EPMD.
         Node handles the networking asynchronously.
 
@@ -46,33 +42,24 @@ class Node(Greenlet):
 
         Usage example:
 
-        1. Monkey patch with the help of Gevent: ``from gevent import monkey``
-            and then ``monkey.patch_all()``.
-
-        2. Create a node class with a name and a cookie
+        1. Create a node class with a name and a cookie
             ``node = Pyrlang.Node("py@127.0.0.1", "COOKIE")``
+        2. Start it with ``node.start()`` - this will spawn an asyncio task
+        3. Now run asyncio loop and the Node will do its thing in the background
 
-        3. Start it with ``node.start()``
-
-        4. Now anything that you do (for example an infinite loop with
-            ``gevent.sleep(1)`` in it, will give CPU time to the node.
-
-        .. note:: Node is a singleton, you can find the current node by
-            referencing ``Node.singleton``. This may change in future.
+        To find node by its name, use find_node(name: str) function
     """
-    singleton = None
-    """ Access this to find the current node. This may change in future. """
 
-    def __init__(self, name: str, cookie: str) -> None:
-        Greenlet.__init__(self)
+    # singleton = None
+    # """ Access this to find the current node. This may change in future. """
 
-        if Node.singleton is not None:
-            raise NodeException("Singleton Node was already created")
-        Node.singleton = self
+    def __init__(self, name: str, cookie: str,
+                 loop: asyncio.AbstractEventLoop) -> None:
+        self.loop_ = loop if loop is not None else asyncio.get_event_loop()
 
-        # Message queue based on ``gevent.Queue``. It is periodically checked
-        # in the ``_run`` method and the receive handler is called.
-        self.inbox_ = mailbox.Mailbox()
+        self.inbox_ = asyncio.Queue()
+        """ Message queue based on ``asyncio.Queue``. It is periodically checked
+            in the ``_run`` method and the receive handler is called. """
 
         # An internal counter used to generate unique process ids
         self.pid_counter_ = 0
@@ -85,10 +72,10 @@ class Node(Greenlet):
         #     In the end of its lifetime an object must be explicitly removed
         #     from this dictionary using ``Process.exit`` method on the
         #     process.
-        self.processes_ = {} # type: Dict[Pid, Process]
+        self.processes_ = {}  # type: Dict[Pid, process.Process]
 
         # Registered objects dictionary, which maps atoms to pids
-        self.reg_names_ = {} # type: Dict[Atom, Pid]
+        self.reg_names_ = {}  # type: Dict[Atom, Pid]
 
         self.is_exiting_ = False
 
@@ -100,8 +87,8 @@ class Node(Greenlet):
         # ``name@hostname``
         self.name_ = Atom(name)
 
-        self.dist_nodes_ = {} # type: Dict[str, Node]
-        self.dist_ = ErlangDistribution(node=self, name=name)
+        self.dist_nodes_ = {}  # type: Dict[str, Node]
+        self.dist_ = ErlangDistribution(node=self, name=name, loop=self.loop_)
 
         # This is important before we can begin spawning processes
         # to get the correct node creation
@@ -109,29 +96,31 @@ class Node(Greenlet):
 
         # Spawn and register (automatically) the process 'rex' for remote
         # execution, which takes 'rpc:call's from Erlang
-        from Pyrlang.rex import Rex
+        from pyrlang.rex import Rex
         self.rex_ = Rex(self)
-        self.rex_.start()
 
         # Spawn and register (automatically) the 'net_kernel' process which
         # handles special ping messages
-        from Pyrlang.net_kernel import NetKernel
+        from pyrlang.net_kernel import NetKernel
         self.net_kernel_ = NetKernel(self)
-        self.net_kernel_.start()
 
-    def _run(self):
+    def start(self):
+        self.loop_.create_task(self._run())
+
+    async def _run(self):
         while not self.is_exiting_:
-            self.handle_inbox()
-            gevent.sleep(0.0)
+            await self.handle_inbox()
+            # await asyncio.sleep(0.0)
 
-    def handle_inbox(self):
+    async def handle_inbox(self):
         while True:
             # Block, but then gevent will allow other green-threads to
             # run, so rather than unnecessarily consuming CPU block
-            msg = self.inbox_.get()
+            msg = await self.inbox_.get()
             # msg = self.inbox_.receive(filter_fn=lambda _: True)
             if msg is None:
                 break
+
             self.handle_one_inbox_message(msg)
 
     def handle_one_inbox_message(self, m: tuple):
@@ -169,7 +158,7 @@ class Node(Greenlet):
         return pid1
 
     def on_exit_process(self, pid, reason):
-        LOG("Process %s exited with %s", pid, reason)
+        logging.info("Process %s exited with %s", pid, reason)
         del self.processes_[pid]
 
     def register_name(self, proc, name) -> None:
@@ -189,7 +178,7 @@ class Node(Greenlet):
         self.is_exiting_ = True
         self.dist_.disconnect()
 
-    def where_is(self, ident) -> Union[Process, None]:
+    def where_is(self, ident) -> Union[process.Process, None]:
         """ Look up a registered name or pid.
 
             :rtype: Process or None
@@ -214,7 +203,8 @@ class Node(Greenlet):
 
         receiver_obj = self.where_is(receiver)
         if receiver_obj is not None:
-            LOG("Node: send local reg=%s receiver=%s msg=%s" % (receiver, receiver_obj, message))
+            LOG("Node: send local reg=%s receiver=%s msg=%s" % (
+            receiver, receiver_obj, message))
             receiver_obj.inbox_.put(message)
         else:
             WARN("Node: send to unregistered name %s ignored" % receiver)
@@ -288,7 +278,7 @@ class Node(Greenlet):
         """
         return self.node_opts_.cookie_
 
-    def dist_command(self, receiver_node: str, message: tuple) -> None:
+    async def dist_command(self, receiver_node: str, message: tuple) -> None:
         """ Locate the connection to the given node (a string).
             Place a tuple crafted by the caller into message box for Erlang
             distribution socket. It will pick up and handle the message whenever
@@ -300,7 +290,7 @@ class Node(Greenlet):
         """
         if receiver_node not in self.dist_nodes_:
             LOG("Node: connect to node", receiver_node)
-            handler = self.dist_.connect_to_node(
+            handler = await self.dist_.connect_to_node(
                 this_node=self,
                 remote_node=receiver_node)
 
@@ -313,7 +303,7 @@ class Node(Greenlet):
             #     filter_fn=lambda m: m[0] == 'node_connected'
             # )
             while receiver_node not in self.dist_nodes_:
-                gevent.sleep(0.1)
+                await asyncio.sleep(0.1)
 
             LOG("Node: connected")
 
@@ -368,4 +358,13 @@ class Node(Greenlet):
             origin_p.monitor_targets_.discard(target_proc.pid_)
 
 
-__all__ = ['Node', 'NodeException']
+_NODES = {}  # type: Dict[str, Node]
+
+
+def find_node(name: str) -> Node:
+    global _NODES
+    return _NODES[name]
+
+
+__all__ = ["Node",
+           "find_node"]

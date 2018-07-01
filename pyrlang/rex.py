@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import traceback
 
-from Pyrlang import Term, gen
-from Pyrlang.process import Process
-from Pyrlang.node import Node
+from pyrlang.term.atom import Atom
+from pyrlang import gen
+from pyrlang.process import Process
+from pyrlang.node import Node
 
 
 class Rex(Process):
@@ -32,7 +30,7 @@ class Rex(Process):
 
     def __init__(self, node: Node) -> None:
         Process.__init__(self, node)
-        node.register_name(self, Term.Atom('rex'))
+        node.register_name(self, Atom('rex'))
 
         self.traceback_depth_ = 5
         """ This being non-zero enables formatting exception tracebacks with the

@@ -7,8 +7,8 @@ Elixir, Alpaca, Luaerl, LFE, Clojerl and such.
 
 With just a few lines of startup code your Python program becomes an Erlang 
 network node, participating in the Erlang cluster.
- 
- 
+
+
 Documentation
 -------------
 

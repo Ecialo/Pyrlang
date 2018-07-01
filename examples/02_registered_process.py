@@ -12,16 +12,12 @@
 # Run:          from project root run `make example2`
 # Erl command:  {my_process, 'py@127.0.0.1'} ! hello.
 #
-
+import asyncio
 import sys
 sys.path.insert(0, ".")
 
-import gevent
-from gevent import monkey
-monkey.patch_all()
-import Pyrlang
-from Pyrlang import Atom
-from Pyrlang import Process
+from pyrlang.term.atom import Atom
+from pyrlang.process import Process
 
 
 class MyProcess(Process):
@@ -34,13 +30,15 @@ class MyProcess(Process):
         print("Incoming", msg)
 
 
-def main():
-    node = Pyrlang.Node("py@127.0.0.1", "COOKIE")
+async def main():
+    node = PyrlangGevent.Node("py@127.0.0.1", "COOKIE")
     node.start()
     mp = MyProcess(node)
     while True:
-        gevent.sleep(0.1)
+        await asyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    loop.close()

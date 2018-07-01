@@ -14,8 +14,8 @@
 
 import struct
 
-from Pyrlang.Dist import util
-from Pyrlang.Term.atom import Atom
+from pyrlang.dist import util
+from pyrlang.term.atom import Atom
 
 
 class Reference:

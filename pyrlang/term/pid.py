@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from Pyrlang.Term.atom import Atom
+from pyrlang.term.atom import Atom
 
 PID_MARKER = "pyrlang.Pid"
 
